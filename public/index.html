@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp DP Changer</title>
+    <style>
+        /* Your existing styles here */
+        .pair-code-container {
+            margin: 20px 0;
+            padding: 15px;
+            background: rgba(37, 211, 102, 0.1);
+            border-radius: 8px;
+            text-align: center;
+        }
+        .pair-code {
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: 3px;
+            color: #25D366;
+        }
+        .qr-display {
+            margin: 15px auto;
+            max-width: 200px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="typing-text">WhatsApp FullPP Site</h1>
+        
+        <div class="input-group">
+            <label for="image-upload" class="file-label floating">Select Image</label>
+            <input type="file" id="image-upload" class="file-input" accept="image/*">
+        </div>
+        
+        <div class="preview-container">
+            <img id="image-preview" class="image-preview" alt="Selected image preview">
+        </div>
+        
+        <div class="input-group">
+            <label for="whatsapp-number">WhatsApp Number (with country code)</label>
+            <input type="tel" id="whatsapp-number" placeholder="e.g. 94771234567">
+        </div>
+        
+        <button id="generate-btn" class="btn">Generate Pair Code</button>
+        
+        <div id="pair-code-container" class="pair-code-container" style="display: none;">
+            <p>Send this code to the number:</p>
+            <div class="pair-code" id="pair-code-display"></div>
+            <p>or scan this QR code:</p>
+            <img id="qr-display" class="qr-display">
+            <p id="pair-status">Waiting for pair confirmation...</p>
+        </div>
+        
+        <div class="success-message" id="success-message"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const imageUpload = document.getElementById('image-upload');
+            const imagePreview = document.getElementById('image-preview');
+            const whatsappNumber = document.getElementById('whatsapp-number');
+            const generateBtn = document.getElementById('generate-btn');
+            const pairCodeContainer = document.getElementById('pair-code-container');
+            const pairCodeDisplay = document.getElementById('pair-code-display');
+            const qrDisplay = document.getElementById('qr-display');
+            const pairStatus = document.getElementById('pair-status');
+            const successMessage = document.getElementById('success-message');
+
+            let currentPhone = '';
+            let checkPairInterval = null;
+
+            // Handle image selection
+            imageUpload.addEventListener('change', function(e) {
+                if (e.target.files.length > 0) {
+                    const file = e.target.files[0];
+                    const reader = new FileReader();
+                    
+                    reader.onload = function(event) {
+                        imagePreview.src = event.target.result;
+                        imagePreview.style.display = 'block';
+                    };
+                    
+                    reader.readAsDataURL(file);
+                }
+            });
+
+            // Generate pair code
+            generateBtn.addEventListener('click', async function() {
+                if (!imageUpload.files[0]) {
+                    alert('Please select an image first');
+                    return;
+                }
+                
+                if (!whatsappNumber.value) {
+                    alert('Please enter a WhatsApp number');
+                    return;
+                }
+
+                currentPhone = whatsappNumber.value;
+                generateBtn.disabled = true;
+                successMessage.style.display = 'none';
+
+                try {
+                    // Generate pair code
+                    const response = await fetch('/api/generate-pair', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            phone: currentPhone
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (!data.success) {
+                        throw new Error(data.error || 'Failed to generate pair code');
+                    }
+                    
+                    // Display pair code and QR
+                    pairCodeDisplay.textContent = data.pairCode;
+                    qrDisplay.src = data.qrImage;
+                    pairCodeContainer.style.display = 'block';
+                    
+                    // Start checking pair status
+                    checkPairInterval = setInterval(checkPairStatus, 3000);
+                    
+                } catch (error) {
+                    console.error('Error:', error);
+                    successMessage.textContent = error.message;
+                    successMessage.style.color = '#FF3B30';
+                    successMessage.style.display = 'block';
+                    generateBtn.disabled = false;
+                }
+            });
+
+            // Check if pair is confirmed
+            async function checkPairStatus() {
+                try {
+                    const imageData = await new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result);
+                        reader.readAsDataURL(imageUpload.files[0]);
+                    });
+                    
+                    const response = await fetch('/api/update-dp', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            phone: currentPhone,
+                            imageData: imageData
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        clearInterval(checkPairInterval);
+                        pairStatus.textContent = 'DP updated successfully!';
+                        successMessage.textContent = result.message;
+                        successMessage.style.color = '#25D366';
+                        successMessage.style.display = 'block';
+                        
+                        // Reset after 5 seconds
+                        setTimeout(() => {
+                            pairCodeContainer.style.display = 'none';
+                            generateBtn.disabled = false;
+                        }, 5000);
+                    } else {
+                        pairStatus.textContent = 'Waiting... (' + result.error + ')';
+                    }
+                } catch (error) {
+                    console.error('Pair check error:', error);
+                    pairStatus.textContent = 'Error checking pair status';
+                }
+            }
+        });
+    </script>
+</body>
+  </html>
