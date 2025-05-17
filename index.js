@@ -23,7 +23,8 @@ async function startWhatsApp() {
   sock = makeWASocket({
     auth: state,
     printQRInTerminal: false,
-    browser: ['WhatsApp DP Changer', 'Chrome', 'Linux']
+    browser: ['WhatsApp DP Changer', 'Chrome', 'Linux'],
+    version: [2, 2413, 1] // Important for manul-ofc-baileys-new
   });
 
   sock.ev.on('creds.update', saveState);
@@ -68,7 +69,30 @@ app.post('/api/generate-pair', async (req, res) => {
     success: true,
     pairCode,
     qrImage,
-    deepLink
+    deepLink,
+    message: 'Send this code to the target number'
+  });
+});
+
+app.post('/api/check-verification', async (req, res) => {
+  const { phone, code } = req.body;
+  
+  if (!pairCodes.has(phone)) {
+    return res.json({ verified: false, error: 'No active session for this number' });
+  }
+
+  if (pairCodes.get(phone).code !== code) {
+    return res.json({ verified: false, error: 'Invalid code' });
+  }
+
+  if (Date.now() > pairCodes.get(phone).expiresAt) {
+    pairCodes.delete(phone);
+    return res.json({ verified: false, error: 'Code expired' });
+  }
+
+  res.json({ 
+    verified: true,
+    expiresAt: pairCodes.get(phone).expiresAt
   });
 });
 
@@ -94,7 +118,7 @@ app.post('/api/update-dp', async (req, res) => {
     res.json({ success: true, message: 'DP updated successfully!' });
   } catch (error) {
     console.error('DP update error:', error);
-    res.status(500).json({ error: 'Failed to update DP' });
+    res.status(500).json({ error: 'Failed to update DP', details: error.message });
   }
 });
 
